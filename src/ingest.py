@@ -91,9 +91,16 @@ def build_vectorstore(chunks: list) -> FAISS:
         # is equivalent to dot product → faster computation
     )
 
-    print(f"🗂️  Building FAISS index from {len(chunks)} chunks...")
-    vectorstore = FAISS.from_documents(chunks, embeddings)
-    print(f"   Index built ✅")
+    index_path = Path(FAISS_INDEX_PATH)
+    if index_path.exists() and (index_path / "index.faiss").exists():
+        print(f"🗂️  Found existing FAISS index! Adding {len(chunks)} new chunks to it...")
+        vectorstore = FAISS.load_local(FAISS_INDEX_PATH, embeddings, allow_dangerous_deserialization=True)
+        vectorstore.add_documents(chunks)
+        print(f"   Index updated ✅")
+    else:
+        print(f"🗂️  Building NEW FAISS index from {len(chunks)} chunks...")
+        vectorstore = FAISS.from_documents(chunks, embeddings)
+        print(f"   Index built ✅")
 
     return vectorstore, embeddings
 
