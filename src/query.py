@@ -26,8 +26,7 @@ TEMPERATURE = 0.1         # low = factual, high = creative
 # "Answer ONLY from the context" prevents hallucination.
 # "If you don't know, say so" prevents confident wrong answers.
 
-RAG_PROMPT_TEMPLATE = """You are a helpful assistant that answers questions
-based strictly on the provided context.
+RAG_PROMPT_TEMPLATE = """You are a helpful assistant that answers questions.
 
 Context:
 {context}
@@ -111,6 +110,17 @@ def query_documents(qa_chain: RetrievalQA, question: str) -> dict:
     Run a question through the RAG pipeline.
     Returns answer + source chunks used to generate it.
     """
+    # ── INTENT ROUTER (Small Talk Intercept) ──
+    greetings = ["hi", "hii", "hello", "hey", "how are you", "what's up", "hey how are you"]
+    if question.lower().strip() in greetings:
+        return {
+            "question": question,
+            "answer": "Hello! I am your Document AI Assistant. I am doing great! Please ask me a question about the documents you've uploaded.",
+            "sources": [],
+            "num_chunks_used": 0,
+        }
+
+    # ── DEFAULT RAG PATH ──
     result = qa_chain.invoke({"query": question})
 
     # Format source documents for clean output

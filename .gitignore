@@ -6,3 +6,4 @@ __pycache__/
 .DS_Store
 temp.txt
 faiss_index/
+data/

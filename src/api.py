@@ -32,9 +32,11 @@ class QueryRequest(BaseModel):
         description="Number of chunks to retrieve"
     )
 
+from typing import Union
+
 class SourceChunk(BaseModel):
     content: str
-    page: int | str
+    page: Union[int, str]
     source: str
 
 class QueryResponse(BaseModel):
