@@ -45,35 +45,78 @@ def ask_question(message: str, history: list) -> str:
     except requests.exceptions.ConnectionError:
         return "❌ Error: Could not connect to the FastAPI backend. Is it running?"
 
-# Create the layout
-with gr.Blocks(theme=gr.themes.Soft()) as app:
-    gr.Markdown("# 🧠 Document Q&A RAG System")
-    gr.Markdown("Upload a PDF to build the knowledge base, then ask questions about it!")
-    
-    with gr.Row():
-        # LEFT COLUMN (Upload area)
-        with gr.Column(scale=1):
-            gr.Markdown("### 1. Upload Document")
-            file_input = gr.File(label="Upload PDF", file_types=[".pdf"])
-            upload_btn = gr.Button("Ingest PDF", variant="primary")
-            status_output = gr.Textbox(label="System Status")
-            
-            # Connect the button click to the upload function
-            upload_btn.click(
-                fn=upload_pdf, 
-                inputs=file_input, 
-                outputs=status_output,
-                api_name=False
-            )
-            
-        # RIGHT COLUMN (Chat area)
-        with gr.Column(scale=3):
-            gr.Markdown("### 2. Chat with Document")
-            # Gradio's built-in chat interface maps directly to our ask_question function
-            chat = gr.ChatInterface(
-                fn=ask_question, 
-                show_progress="hidden"
-            )
+# Create a custom theme
+custom_theme = gr.themes.Soft(
+    primary_hue="indigo",
+    secondary_hue="blue",
+    neutral_hue="slate",
+    font=[gr.themes.GoogleFont("Inter"), "ui-sans-serif", "system-ui", "sans-serif"],
+).set(
+    body_background_fill="*neutral_50",
+    block_background_fill="white",
+    block_border_width="1px",
+    block_border_color="*neutral_200",
+    block_shadow="*shadow_sm",
+    button_primary_background_fill="*primary_500",
+    button_primary_background_fill_hover="*primary_600",
+    button_primary_text_color="white",
+)
+
+custom_css = """
+.gradio-container {
+    max-width: 1200px !important;
+    margin: auto;
+}
+.header-text {
+    text-align: center;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(90deg, #4f46e5, #3b82f6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 2.5rem;
+    font-weight: 800;
+}
+.subtitle-text {
+    text-align: center;
+    color: #64748b;
+    margin-bottom: 2rem;
+    font-size: 1.1rem;
+}
+"""
+
+with gr.Blocks(theme=custom_theme, css=custom_css) as app:
+    with gr.Column():
+        gr.HTML('''
+            <h1 class="header-text">🧠 AI Document Intelligence</h1>
+            <p class="subtitle-text">Upload your PDF and extract insights instantly powered by RAG</p>
+        ''')
+        
+        with gr.Row():
+            # LEFT COLUMN (Upload area)
+            with gr.Column(scale=1):
+                gr.Markdown("### 📄 Knowledge Base")
+                gr.Markdown("Upload a document to provide context to the AI.")
+                with gr.Group():
+                    file_input = gr.File(label="Upload File", file_types=[".pdf"])
+                    upload_btn = gr.Button("🚀 Process Document", variant="primary", size="lg")
+                status_output = gr.Textbox(label="System Status", show_copy_button=False)
+                
+                # Connect the button click to the upload function
+                upload_btn.click(
+                    fn=upload_pdf, 
+                    inputs=file_input, 
+                    outputs=status_output,
+                    api_name=False
+                )
+                
+            # RIGHT COLUMN (Chat area)
+            with gr.Column(scale=2):
+                chat = gr.ChatInterface(
+                    fn=ask_question,
+                    chatbot=gr.Chatbot(height=500, label="Agent", show_copy_button=True),
+                    textbox=gr.Textbox(placeholder="Ask a question about the document...", container=False, scale=7),
+                )
 
 # Run the app!
 if __name__ == "__main__":
