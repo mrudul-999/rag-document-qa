@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: rag_api
+    # Start the FastAPI backend
+    command: uvicorn src.api:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    # Mount volumes so files persist safely on your host machine even if container shuts down
+    volumes:
+      - ./data:/app/data
+      - ./faiss_index:/app/faiss_index
+    env_file:
+      - .env
+
+  frontend:
+    build: .
+    container_name: rag_frontend
+    # Start the Gradio frontend
+    command: python frontend.py
+    ports:
+      - "8501:8501"
+    environment:
+      # Tell the frontend to route requests to the internal 'api' docker service
+      - API_URL=http://api:8000
+    depends_on:
+      - api

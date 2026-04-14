@@ -15,7 +15,7 @@ We will be iterating on the system based on the following planned features:
 - [x] **Streaming Responses**: Implement Server-Sent Events (SSE) in FastAPI to stream LLM tokens directly to the Gradio interface in real-time.
 - [ ] **Conversational Memory**: Add `ConversationBufferWindowMemory` to allow for multi-turn conversational context.
 - [ ] **Background Processing**: Setup `FastAPI BackgroundTasks` for asynchronous document ingestion.
-- [ ] **Dockerization**: Add a `Dockerfile` and `docker-compose.yml` for instant setup.
+- [x] **Dockerization**: Add a `Dockerfile` and `docker-compose.yml` for instant setup.
 
 ### 3. UI/UX Polishing
 - [x] **Premium Theming**: Integrated a custom Google Font (Inter), modern color palettes, gradient titles, and improved Chat UI layout using Gradio custom CSS.
@@ -37,3 +37,4 @@ We will be iterating on the system based on the following planned features:
   * **Server-Sent Events (`src/api.py`)**: Designed a new `/stream` REST endpoint utilizing FastAPI's `StreamingResponse` to continuously pull tokens from the queue and flush them to the client instantly as Server-Sent Events (SSE). 
   * **Generator Functions (`frontend.py`)**: Migrated the Gradio `ChatInterface` to consume the stream via generator (`yield`) over `requests.iter_lines()`, giving the chat a fluid "typewriter" effect just like ChatGPT.
 * **Cross-Encoder Re-ranking:** Replaced standard FAISS top-k retrieval with a `ContextualCompressionRetriever`. The pipeline now over-fetches 15 chunks (for high recall), then scores each chunk against the user's query using the `cross-encoder/ms-marco-MiniLM-L-6-v2` model, filtering the context window down to the exactly 4 most definitively relevant chunks to feed into the generative model.
+* **Dockerization:** Wrote a multi-service `docker-compose.yml` architecture with a unified `Dockerfile` to instantiate the FastAPI backend (`api` container) and Gradio frontend (`frontend` container) cleanly. Mounted local volumes to persist vector embeddings (`faiss_index`) explicitly, and passed `.env` data securely. Re-wired the UI logic to allow dynamic API service-name networking inside the Docker bridge network.
