@@ -87,6 +87,7 @@ def build_qa_chain(vectorstore: FAISS) -> RetrievalQA:
         temperature=TEMPERATURE,
         max_new_tokens=512,
         huggingfacehub_api_token=os.getenv("HUGGINGFACEHUB_API_TOKEN"),
+        streaming=True,
     )
     from langchain_huggingface import ChatHuggingFace
     llm = ChatHuggingFace(llm=endpoint)
@@ -104,63 +105,57 @@ def build_qa_chain(vectorstore: FAISS) -> RetrievalQA:
     return qa_chain
 
 
-# ── QUERY FUNCTION ────────────────────────────────────────
-def query_documents(qa_chain: RetrievalQA, question: str) -> dict:
+import asyncio
+from langchain.callbacks.base import BaseCallbackHandler
+
+async def stream_query_documents(qa_chain: RetrievalQA, question: str):
     """
-    Run a question through the RAG pipeline.
-    Returns answer + source chunks used to generate it.
+    Run the RAG pipeline asynchronously and stream tokens back using native astream().
     """
-    # ── INTENT ROUTER (Small Talk Intercept) ──
-    greetings = ["hi", "hii", "hello", "hey", "how are you", "what's up", "hey how are you"]
+    # ── INTENT ROUTER ──
+    greetings = ["hi", "hii", "hello", "hey", "heyy", "heyyy", "how are you", "what's up", "hey how are you"]
     if question.lower().strip() in greetings:
-        return {
-            "question": question,
-            "answer": "Hello! I am your Document AI Assistant. I am doing great! Please ask me a question about the documents you've uploaded.",
-            "sources": [],
-            "num_chunks_used": 0,
-        }
+        yield {"type": "token", "content": "Hello! I am your Document AI Assistant. "}
+        yield {"type": "token", "content": "Please ask me a question about the documents you've uploaded."}
+        yield {"type": "sources", "sources": []}
+        return
 
-    # ── DEFAULT RAG PATH ──
-    result = qa_chain.invoke({"query": question})
+    try:
+        # 1. Retrieve context
+        retriever = qa_chain.retriever
+        docs = retriever.invoke(question)  # use sync invoke to avoid faiss async limitations
+        
+        # 2. Combine document context
+        context = "\n\n".join([d.page_content for d in docs])
+        
+        # 3. Format Prompt
+        prompt_chain = qa_chain.combine_documents_chain.llm_chain
+        formatted_prompt = prompt_chain.prompt.format(context=context, question=question)
+        
+        # 4. Stream from LLM via modern LCEL
+        llm = prompt_chain.llm
+        
+        async for chunk in llm.astream(formatted_prompt):
+            content = chunk.content if hasattr(chunk, "content") else str(chunk)
+            if content:
+                yield {"type": "token", "content": content}
 
-    # Format source documents for clean output
-    sources = []
-    for doc in result["source_documents"]:
-        sources.append({
-            "content": doc.page_content[:300],   # preview of chunk
-            "page": doc.metadata.get("page", "unknown"),
-            "source": doc.metadata.get("source", "unknown"),
-        })
+        # 5. Yield source metadata
+        sources = []
+        for doc in docs:
+            sources.append({
+                "content": doc.page_content[:300],
+                "page": doc.metadata.get("page", "unknown"),
+                "source": doc.metadata.get("source", "unknown"),
+            })
+        yield {"type": "sources", "sources": sources}
 
-    return {
-        "question": question,
-        "answer": result["result"].strip(),
-        "sources": sources,
-        "num_chunks_used": len(sources),
-    }
-
+    except Exception as e:
+        yield {"type": "error", "content": str(e)}
 
 # ── QUICK TEST — run this file directly to verify ─────────
 if __name__ == "__main__":
-    print("Loading vectorstore...")
-    vectorstore = load_vectorstore()
-
-    print("Building QA chain...")
-    qa_chain = build_qa_chain(vectorstore)
-
-    test_questions = [
-        "What is the attention mechanism?",
-        "What are the main components of the Transformer architecture?",
-        "What training data was used?",
-    ]
-
-    for question in test_questions:
-        print(f"\n{'='*50}")
-        print(f"Q: {question}")
-        result = query_documents(qa_chain, question)
-        print(f"A: {result['answer']}")
-        print(f"Sources: {result['num_chunks_used']} chunks from pages "
-              f"{[s['page'] for s in result['sources']]}")
+    pass
 
 
 

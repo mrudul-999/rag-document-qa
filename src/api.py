@@ -9,8 +9,11 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from fastapi.responses import StreamingResponse
+import json
+
 from src.ingest import ingest
-from src.query import load_vectorstore, build_qa_chain, query_documents
+from src.query import load_vectorstore, build_qa_chain
 
 # ── REQUEST / RESPONSE MODELS (DTOs) ─────────────────────
 # Interview point: these are exactly the DTOs you built at eQube-MI.
@@ -198,6 +201,26 @@ async def query(request: QueryRequest):
         num_chunks_used=result["num_chunks_used"],
         response_time_ms=round(response_time_ms, 2),
     )
+
+
+@app.post("/stream")
+async def query_stream(request: QueryRequest):
+    """
+    Stream the answer back token by token using Server-Sent Events (SSE).
+    """
+    if not app_state.get("ready"):
+        raise HTTPException(
+            status_code=503,
+            detail="No documents ingested yet. Upload a PDF first via /upload"
+        )
+
+    async def event_generator():
+        from src.query import stream_query_documents
+        async for chunk in stream_query_documents(app_state["qa_chain"], request.question):
+            # chunk is a dict like {"type": "token", "content": "hi"}
+            yield f"data: {json.dumps(chunk)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.get("/")

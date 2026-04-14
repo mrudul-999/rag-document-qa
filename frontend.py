@@ -19,31 +19,43 @@ def upload_pdf(file) -> str:
     else:
         return f"❌ Error: {response.text}"
 
-def ask_question(message: str, history: list) -> str:
+import json
+
+def ask_question(message: str, history: list):
     payload = {
         "question": message,
         "k": 4  # Retrieve the top 4 chunks
     }
     
     try:
-        response = requests.post(f"{API_URL}/query", json=payload)
-        
-        if response.status_code == 200:
-            data = response.json()
-            answer = data["answer"]
-            
-            # Format the source pages creatively!
-            source_pages = set([str(s["page"]) for s in data["sources"]])
-            sources_text = "\n\n*(Sources: Page(s) " + ", ".join(source_pages) + ")*"
-            
-            return answer + sources_text
-        elif response.status_code == 503:
-            return "⚠️ Please upload a PDF file on the left first!"
-        else:
-            return f"Error: {response.text}"
-            
+        with requests.post(f"{API_URL}/stream", json=payload, stream=True) as response:
+            if response.status_code == 200:
+                answer = ""
+                sources_text = ""
+                
+                for line in response.iter_lines():
+                    if line:
+                        decoded_line = line.decode('utf-8')
+                        if decoded_line.startswith("data: "):
+                            data = json.loads(decoded_line[6:])
+                            
+                            if data["type"] == "token":
+                                answer += data["content"]
+                                yield answer
+                            elif data["type"] == "sources":
+                                if data["sources"]:
+                                    source_pages = set([str(s["page"]) for s in data["sources"]])
+                                    sources_text = "\n\n*(Sources: Page(s) " + ", ".join(source_pages) + ")*"
+                                yield answer + sources_text
+                            elif data["type"] == "error":
+                                yield f"❌ Error from model: {data['content']}"
+            elif response.status_code == 503:
+                yield "⚠️ Please upload a PDF file on the left first!"
+            else:
+                yield f"Error: {response.text}"
+                
     except requests.exceptions.ConnectionError:
-        return "❌ Error: Could not connect to the FastAPI backend. Is it running?"
+        yield "❌ Error: Could not connect to the FastAPI backend. Is it running?"
 
 # Create a custom theme
 custom_theme = gr.themes.Soft(

@@ -1,0 +1,87 @@
+
+A pipeline that streams LLM output in real time instead of waiting for full response.
+
+Flow:
+
+LLM → callback → queue → FastAPI SSE → frontend generator → UI
+
+
+## Core idea
+
+Break response into tokens.
+Send each token immediately.
+Render it instantly.
+
+This reduces perceived latency.
+
+
+
+## Backend logic
+
+Using LangChain + FastAPI
+
+### 1. Callback handler
+
+* LLM generates tokens
+* handler captures each token
+* pushes into `asyncio.Queue`
+
+This is producer side.
+
+---
+
+### 2. Queue
+
+* acts as buffer
+* decouples generation and delivery
+* prevents blocking
+
+---
+
+### 3. SSE endpoint
+
+* FastAPI `StreamingResponse`
+* reads from queue
+* sends tokens as:
+
+data: token
+
+* keeps connection open
+
+---
+
+## Frontend logic
+
+### Generator + requests
+
+* connects to `/stream`
+* reads using `iter_lines()`
+* extracts tokens
+* builds response step by step
+
+### Key line
+
+yield partial
+
+Each yield updates UI → typewriter effect
+
+---
+
+## Why it feels fast
+
+* first token arrives early
+* user sees progress
+* no long wait
+
+---
+
+## Mental model
+
+* LLM writes tokens
+* queue stores tokens
+* API streams tokens
+* UI prints tokens
+
+---
+
+That is it.
