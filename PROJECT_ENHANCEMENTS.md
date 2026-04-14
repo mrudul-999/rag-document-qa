@@ -7,7 +7,7 @@ This document tracks the advanced features and architectural improvements made t
 We will be iterating on the system based on the following planned features:
 
 ### 1. Advanced RAG Techniques
-- [ ] **Cross-Encoder Re-ranking**: Retrieve more documents initially, then re-rank them using a Cross-Encoder to significantly boost answer relevance.
+- [x] **Cross-Encoder Re-ranking**: Retrieve more documents initially, then re-rank them using a Cross-Encoder to significantly boost answer relevance.
 - [ ] **Hybrid Search**: Combine Dense (FAISS) and Sparse (BM25) retrieval using Reciprocal Rank Fusion.
 - [ ] **Smart Chunking**: Replace naive character splitting with Semantic/Document Hierarchy chunking.
 
@@ -36,3 +36,4 @@ We will be iterating on the system based on the following planned features:
   * **Langchain Async Handlers (`src/query.py`)**: Added an `AsyncStreamCallbackHandler` that intercepts LLM token generation and queues them into a non-blocking `asyncio.Queue` background task.
   * **Server-Sent Events (`src/api.py`)**: Designed a new `/stream` REST endpoint utilizing FastAPI's `StreamingResponse` to continuously pull tokens from the queue and flush them to the client instantly as Server-Sent Events (SSE). 
   * **Generator Functions (`frontend.py`)**: Migrated the Gradio `ChatInterface` to consume the stream via generator (`yield`) over `requests.iter_lines()`, giving the chat a fluid "typewriter" effect just like ChatGPT.
+* **Cross-Encoder Re-ranking:** Replaced standard FAISS top-k retrieval with a `ContextualCompressionRetriever`. The pipeline now over-fetches 15 chunks (for high recall), then scores each chunk against the user's query using the `cross-encoder/ms-marco-MiniLM-L-6-v2` model, filtering the context window down to the exactly 4 most definitively relevant chunks to feed into the generative model.

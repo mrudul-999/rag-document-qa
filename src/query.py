@@ -11,9 +11,11 @@ load_dotenv()
 
 # ── CONFIG ────────────────────────────────────────────────
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 FAISS_INDEX_PATH = "faiss_index"
 LLM_MODEL = "HuggingFaceH4/zephyr-7b-beta"
-TOP_K_CHUNKS = 4          # how many chunks to retrieve per query
+TOP_K_INITIAL = 15        # chunks to retrieve initially (for high recall)
+TOP_K_FINAL = 4           # chunks to keep after cross-encoder scoring
 TEMPERATURE = 0.1         # low = factual, high = creative
 
 
@@ -64,24 +66,32 @@ def load_vectorstore() -> FAISS:
     return vectorstore
 
 
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain.retrievers.document_compressors import CrossEncoderReranker
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
+
 # ── BUILD QA CHAIN ────────────────────────────────────────
 def build_qa_chain(vectorstore: FAISS) -> RetrievalQA:
     """
-    Wire together: retriever + prompt + LLM into a RetrievalQA chain.
-
-    chain_type="stuff" means:
-    - retrieve k chunks
-    - "stuff" them all into one prompt
-    - send to LLM in a single call
-
-    Alternative chain types (know these for interviews):
-    - "map_reduce": summarise each chunk separately, then combine
-      → good for very long documents that exceed context window
-    - "refine": answer iteratively, refining with each chunk
-      → more accurate but much slower (k LLM calls instead of 1)
-    - "map_rerank": answer from each chunk, pick highest scoring
-      → good when chunks are very different quality
+    Wire together: retriever + cross_encoder + prompt + LLM into a pipeline.
     """
+    # ── BASE RETRIEVER ──
+    base_retriever = vectorstore.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": TOP_K_INITIAL}
+    )
+
+    # ── CROSS-ENCODER RE-RANKER ──
+    # Scores every chunk explicitly against the question to filter out junk
+    cross_encoder = HuggingFaceCrossEncoder(model_name=CROSS_ENCODER_MODEL)
+    compressor = CrossEncoderReranker(model=cross_encoder, top_n=TOP_K_FINAL)
+    
+    compression_retriever = ContextualCompressionRetriever(
+        base_compressor=compressor,
+        base_retriever=base_retriever
+    )
+
+    # ── LLM GENERATOR ──
     endpoint = HuggingFaceEndpoint(
         repo_id=LLM_MODEL,
         temperature=TEMPERATURE,
@@ -95,12 +105,9 @@ def build_qa_chain(vectorstore: FAISS) -> RetrievalQA:
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",
-        retriever=vectorstore.as_retriever(
-            search_type="similarity",       # cosine similarity search
-            search_kwargs={"k": TOP_K_CHUNKS}
-        ),
+        retriever=compression_retriever,    # using the highly accurate reranker here!
         chain_type_kwargs={"prompt": PROMPT},
-        return_source_documents=True,       # return which chunks were used
+        return_source_documents=True,
     )
     return qa_chain
 
